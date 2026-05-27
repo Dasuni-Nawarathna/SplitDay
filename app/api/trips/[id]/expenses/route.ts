@@ -26,7 +26,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
       _id: exp._id.toString(),
       tripId: exp.tripId.toString(),
       customShares: exp.customShares
-        ? Object.fromEntries(exp.customShares as unknown as Map<string, number>)
+        ? (exp.customShares instanceof Map
+            ? Object.fromEntries(exp.customShares)
+            : (exp.customShares as Record<string, number>))
         : undefined,
     }));
 
@@ -143,12 +145,18 @@ export async function POST(req: NextRequest, { params }: Params) {
       createdAt: new Date(),
     });
 
+    const expObj = expense.toObject();
     return NextResponse.json(
       {
         expense: {
-          ...expense.toObject(),
-          _id: expense._id.toString(),
-          tripId: expense.tripId.toString(),
+          ...expObj,
+          _id: expObj._id.toString(),
+          tripId: expObj.tripId.toString(),
+          customShares: expObj.customShares
+            ? (expObj.customShares instanceof Map
+                ? Object.fromEntries(expObj.customShares)
+                : (expObj.customShares as Record<string, number>))
+            : undefined,
         },
       },
       { status: 201 }

@@ -69,9 +69,16 @@ function ExpenseCard({
         <p className="text-white font-semibold text-sm truncate">{expense.description}</p>
         <p className="text-gray-400 text-xs mt-0.5">
           Paid by <span className="text-violet-300 font-medium">{expense.paidBy}</span>
-          {' · '}split with {expense.splitBetween.length === 1
-            ? expense.splitBetween[0]
-            : `${expense.splitBetween.length} people`}
+          {' · '}
+          {expense.isUnequal ? (
+            <span className="inline-flex items-center gap-0.5 text-amber-400 font-medium">
+              ✏ Custom split
+            </span>
+          ) : (
+            <>split with {expense.splitBetween.length === 1
+              ? expense.splitBetween[0]
+              : `${expense.splitBetween.length} people`}</>
+          )}
         </p>
       </div>
 
@@ -103,36 +110,148 @@ interface AddExpenseModalProps {
   onAdded: () => void;
 }
 
+type SplitMode = 'equal' | 'custom';
+// 'one-paid' = one person fronted the whole bill, others owe their %
+// 'pooled'   = everyone paid their own portion directly (no one owes anyone)
+type CustomType = 'one-paid' | 'pooled';
+
 function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseModalProps) {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [paidBy, setPaidBy] = useState(participants[0] ?? '');
+  const [splitMode, setSplitMode] = useState<SplitMode>('equal');
+  const [customType, setCustomType] = useState<CustomType>('one-paid');
+
+  // Equal mode: checkbox selection
   const [splitBetween, setSplitBetween] = useState<string[]>(participants);
+
+  // Custom % mode: percentage per person
+  const [percentages, setPercentages] = useState<Record<string, string>>(() => {
+    const even = participants.length > 0 ? Math.floor(100 / participants.length) : 0;
+    const init: Record<string, string> = {};
+    participants.forEach((p, i) => {
+      init[p] = i === participants.length - 1
+        ? String(100 - even * (participants.length - 1))
+        : String(even);
+    });
+    return init;
+  });
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const toggleSplit = (name: string) => {
+  const amt = parseFloat(amount) || 0;
+
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const totalPct = participants.reduce(
+    (sum, p) => sum + (parseFloat(percentages[p] ?? '0') || 0), 0
+  );
+  const pctRemaining = Math.round((100 - totalPct) * 10) / 10;
+  const isBalanced = Math.abs(totalPct - 100) < 0.01;
+
+  const getShares = (): Record<string, number> => {
+    const shares: Record<string, number> = {};
+    participants.forEach((p) => {
+      const pct = parseFloat(percentages[p] ?? '0') || 0;
+      if (pct > 0) shares[p] = Math.round((amt * pct / 100) * 100) / 100;
+    });
+    return shares;
+  };
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  const toggleSplit = (name: string) =>
     setSplitBetween((prev) =>
       prev.includes(name) ? prev.filter((p) => p !== name) : [...prev, name]
     );
+
+  const updatePct = (name: string, val: string) =>
+    setPercentages((prev) => ({ ...prev, [name]: val }));
+
+  const autoBalance = () => {
+    const n = participants.length;
+    if (n === 0) return;
+    const each = Math.floor(100 / n);
+    const next: Record<string, string> = {};
+    participants.forEach((p, i) => {
+      next[p] = String(i === n - 1 ? each + (100 - each * n) : each);
+    });
+    setPercentages(next);
   };
 
+  // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     setError('');
     if (!description.trim()) return setError('Description is required');
-    const amt = parseFloat(amount);
     if (!amount || isNaN(amt) || amt <= 0) return setError('Enter a valid amount');
-    if (splitBetween.length === 0) return setError('Select at least one person to split with');
 
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/trips/${tripId}/expenses`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: description.trim(), amount: amt, paidBy, splitBetween }),
-      });
-      const data = await res.json();
-      if (!res.ok) return setError(data.error ?? 'Failed to add expense');
+      if (splitMode === 'equal') {
+        // One expense, equal split among selected people
+        if (splitBetween.length === 0) {
+          setError('Select at least one person'); setIsLoading(false); return;
+        }
+        const res = await fetch(`/api/trips/${tripId}/expenses`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description: description.trim(), amount: amt, paidBy, splitBetween, isUnequal: false }),
+        });
+        const data = await res.json();
+        if (!res.ok) { setError(data.error ?? 'Failed to add expense'); setIsLoading(false); return; }
+
+      } else if (customType === 'one-paid') {
+        // One person fronted the full bill; others owe their custom %
+        if (!isBalanced) {
+          setError(`Percentages must total 100% (currently ${totalPct.toFixed(1)}%)`);
+          setIsLoading(false); return;
+        }
+        const shares = getShares();
+        if (Object.keys(shares).length === 0) {
+          setError('At least one person needs a share > 0%'); setIsLoading(false); return;
+        }
+        const res = await fetch(`/api/trips/${tripId}/expenses`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            description: description.trim(), amount: amt, paidBy,
+            splitBetween: Object.keys(shares), isUnequal: true, customShares: shares,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) { setError(data.error ?? 'Failed to add expense'); setIsLoading(false); return; }
+
+      } else {
+        // Pooled: each person paid their own portion → submit one expense per person
+        // Each person is both payer and the one who owes → net = $0, no settlements
+        if (!isBalanced) {
+          setError(`Percentages must total 100% (currently ${totalPct.toFixed(1)}%)`);
+          setIsLoading(false); return;
+        }
+        const shares = getShares();
+        const contributors = Object.entries(shares).filter(([, v]) => v > 0);
+        if (contributors.length === 0) {
+          setError('At least one person needs a share > 0%'); setIsLoading(false); return;
+        }
+        const results = await Promise.all(
+          contributors.map(([name, shareAmt]) =>
+            fetch(`/api/trips/${tripId}/expenses`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                description: `${description.trim()} (${name}'s share)`,
+                amount: shareAmt,
+                paidBy: name,
+                splitBetween: [name],
+                isUnequal: false,
+              }),
+            })
+          )
+        );
+        if (results.some((r) => !r.ok)) {
+          setError('Failed to save one or more contributions'); setIsLoading(false); return;
+        }
+      }
+
       onAdded();
     } catch {
       setError('Network error – please try again');
@@ -141,16 +260,23 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
     }
   };
 
+  // ── UI helpers ─────────────────────────────────────────────────────────────
+  const barColour = isBalanced ? '#10b981' : totalPct > 100 ? '#f43f5e' : '#f59e0b';
+  const barWidth = Math.min(totalPct, 100);
+  const showPaidBy = splitMode === 'equal' || (splitMode === 'custom' && customType === 'one-paid');
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center px-4 pb-4"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="glass-card w-full max-w-md p-6 space-y-4 animate-fade-in-up"
-           style={{ borderRadius: '1.5rem' }}>
+      <div
+        className="glass-card w-full max-w-md animate-fade-in-up overflow-y-auto"
+        style={{ borderRadius: '1.5rem', maxHeight: '90dvh', padding: '1.5rem' }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-white">Log Expense</h2>
           <button onClick={onClose} aria-label="Close modal" id="close-modal-btn"
                   className="text-gray-400 hover:text-white transition-colors">
@@ -160,88 +286,211 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
           </button>
         </div>
 
-        {/* Description */}
-        <div className="space-y-1">
-          <label className="text-sm text-gray-400">Description</label>
-          <input id="expense-description" type="text" className="input-field"
-                 placeholder="e.g. Dinner at Ministry of Crab"
-                 value={description} onChange={(e) => setDescription(e.target.value)} maxLength={80} />
-        </div>
+        <div className="space-y-4">
+          {/* Description */}
+          <div className="space-y-1">
+            <label className="text-sm text-gray-400">Description</label>
+            <input id="expense-description" type="text" className="input-field"
+                   placeholder="e.g. Dinner at Ministry of Crab"
+                   value={description} onChange={(e) => setDescription(e.target.value)} maxLength={80} />
+          </div>
 
-        {/* Amount */}
-        <div className="space-y-1">
-          <label className="text-sm text-gray-400">Amount ($)</label>
-          <input id="expense-amount" type="number" className="input-field"
-                 placeholder="0.00" min="0.01" step="0.01"
-                 value={amount} onChange={(e) => setAmount(e.target.value)} />
-        </div>
+          {/* Amount */}
+          <div className="space-y-1">
+            <label className="text-sm text-gray-400">Total Amount ($)</label>
+            <input id="expense-amount" type="number" className="input-field"
+                   placeholder="0.00" min="0.01" step="0.01"
+                   value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </div>
 
-        {/* Paid By */}
-        <div className="space-y-1">
-          <label className="text-sm text-gray-400">Paid By</label>
-          <select id="expense-paid-by" className="input-field"
-                  value={paidBy} onChange={(e) => setPaidBy(e.target.value)}>
-            {participants.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-        </div>
+          {/* Paid By — hidden when everyone chips in their own */}
+          {showPaidBy && (
+            <div className="space-y-1 animate-fade-in-up">
+              <label className="text-sm text-gray-400">
+                {splitMode === 'custom' ? 'Who fronted the full amount?' : 'Paid By'}
+              </label>
+              <select id="expense-paid-by" className="input-field"
+                      value={paidBy} onChange={(e) => setPaidBy(e.target.value)}>
+                {participants.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
-        {/* Split Between */}
-        <div className="space-y-2">
-          <label className="text-sm text-gray-400">Split Between</label>
-          <div className="grid grid-cols-2 gap-2">
-            {participants.map((p) => {
-              const checked = splitBetween.includes(p);
-              return (
+          {/* ── Split Mode Toggle ──────────────────────────────────────── */}
+          <div className="space-y-3">
+            <label className="text-sm text-gray-400">How to Split?</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(['equal', 'custom'] as SplitMode[]).map((mode) => (
                 <button
-                  key={p}
-                  id={`split-toggle-${p}`}
-                  onClick={() => toggleSplit(p)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                    checked
-                      ? 'text-violet-300 border-violet-600'
-                      : 'text-gray-500 border-white/10'
-                  }`}
+                  key={mode}
+                  id={`split-mode-${mode}`}
+                  onClick={() => setSplitMode(mode)}
+                  className="py-2.5 px-3 rounded-xl text-sm font-semibold transition-all"
                   style={{
-                    border: '1px solid',
-                    background: checked ? 'rgba(124,58,237,0.2)' : 'rgba(255,255,255,0.03)',
+                    background: splitMode === mode ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${splitMode === mode ? '#7c3aed' : 'rgba(255,255,255,0.08)'}`,
+                    color: splitMode === mode ? '#fff' : '#9ca3af',
+                    boxShadow: splitMode === mode ? '0 4px 14px rgba(124,58,237,0.3)' : 'none',
                   }}
                 >
-                  <span className={`w-4 h-4 rounded flex items-center justify-center transition-all ${
-                    checked ? 'bg-violet-600' : 'bg-white/10'
-                  }`}>
-                    {checked && (
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="white" className="w-3 h-3">
-                        <path fillRule="evenodd" d="M9.854 2.646a.5.5 0 0 1 0 .708L5 8.207 2.146 5.354a.5.5 0 1 1 .708-.708L5 6.793l4.146-4.147a.5.5 0 0 1 .708 0Z" clipRule="evenodd"/>
-                      </svg>
-                    )}
-                  </span>
-                  {p}
+                  {mode === 'equal' ? '⚖ Equal Split' : '✏ Custom %'}
                 </button>
-              );
-            })}
+              ))}
+            </div>
+
+            {/* ── Equal: checkboxes ────────────────────────────────────── */}
+            {splitMode === 'equal' && (
+              <div className="grid grid-cols-2 gap-2">
+                {participants.map((p) => {
+                  const checked = splitBetween.includes(p);
+                  const share = checked && amt > 0 ? amt / splitBetween.length : null;
+                  return (
+                    <button key={p} id={`split-toggle-${p}`} onClick={() => toggleSplit(p)}
+                            className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left"
+                            style={{
+                              border: `1px solid ${checked ? '#7c3aed' : 'rgba(255,255,255,0.08)'}`,
+                              background: checked ? 'rgba(124,58,237,0.18)' : 'rgba(255,255,255,0.03)',
+                            }}>
+                      <span className={`w-4 h-4 rounded flex items-center justify-center shrink-0 ${checked ? 'bg-violet-600' : 'bg-white/10'}`}>
+                        {checked && (
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="white" className="w-3 h-3">
+                            <path fillRule="evenodd" d="M9.854 2.646a.5.5 0 0 1 0 .708L5 8.207 2.146 5.354a.5.5 0 1 1 .708-.708L5 6.793l4.146-4.147a.5.5 0 0 1 .708 0Z" clipRule="evenodd"/>
+                          </svg>
+                        )}
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className={`block truncate ${checked ? 'text-violet-200' : 'text-gray-500'}`}>{p}</span>
+                        {share !== null && <span className="block text-xs text-violet-400">${share.toFixed(2)}</span>}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* ── Custom %: sub-type + rows ────────────────────────────── */}
+            {splitMode === 'custom' && (
+              <div className="space-y-3">
+
+                {/* Who-paid sub-toggle */}
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { key: 'one-paid' as CustomType, label: '👤 One person paid', hint: 'Others owe their %' },
+                    { key: 'pooled'   as CustomType, label: '🤝 Everyone chipped in', hint: 'Each paid their own' },
+                  ]).map(({ key, label, hint }) => (
+                    <button
+                      key={key}
+                      id={`custom-type-${key}`}
+                      onClick={() => setCustomType(key)}
+                      className="flex flex-col items-start px-3 py-2.5 rounded-xl text-left transition-all"
+                      style={{
+                        border: `1px solid ${customType === key ? '#f59e0b' : 'rgba(255,255,255,0.08)'}`,
+                        background: customType === key ? 'rgba(245,158,11,0.1)' : 'rgba(255,255,255,0.03)',
+                      }}
+                    >
+                      <span className={`text-xs font-semibold ${customType === key ? 'text-amber-400' : 'text-gray-500'}`}>{label}</span>
+                      <span className="text-gray-600 text-xs mt-0.5">{hint}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Info banner for pooled mode */}
+                {customType === 'pooled' && (
+                  <div className="flex items-start gap-2 px-3 py-2 rounded-xl animate-fade-in-up"
+                       style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                    <span className="text-emerald-400 text-sm mt-0.5">✓</span>
+                    <p className="text-emerald-300 text-xs leading-relaxed">
+                      Each person&apos;s % is what <strong>they already paid</strong>. No one owes anyone — automatically settled!
+                    </p>
+                  </div>
+                )}
+
+                {/* Progress bar */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-400">Total allocated</span>
+                    <span style={{ color: barColour }} className="font-bold">
+                      {totalPct.toFixed(1)}%
+                      {!isBalanced && pctRemaining !== 0 && (
+                        <span className="text-gray-500 font-normal ml-1">
+                          ({pctRemaining > 0 ? `+${pctRemaining}` : pctRemaining}% remaining)
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                    <div className="h-full rounded-full transition-all duration-300"
+                         style={{ width: `${barWidth}%`, background: barColour }} />
+                  </div>
+                </div>
+
+                {/* Per-person % rows */}
+                {participants.map((p) => {
+                  const pct = parseFloat(percentages[p] ?? '0') || 0;
+                  const personAmt = amt > 0 ? amt * pct / 100 : 0;
+                  return (
+                    <div key={p} className="flex items-center gap-3 p-3 rounded-xl"
+                         style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold"
+                           style={{ background: avatarColour(p) }}>
+                        {p[0].toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-medium truncate">{p}</p>
+                        {personAmt > 0 && (
+                          <p className="text-xs mt-0.5" style={{ color: customType === 'pooled' ? '#10b981' : '#a78bfa' }}>
+                            {customType === 'pooled' ? '✓ paid' : 'owes'} ${personAmt.toFixed(2)}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <input
+                          id={`pct-input-${p}`}
+                          type="number" min="0" max="100" step="1"
+                          value={percentages[p] ?? ''}
+                          onChange={(e) => updatePct(p, e.target.value)}
+                          className="w-16 text-right text-sm font-bold text-white rounded-lg px-2 py-1.5 outline-none"
+                          style={{ background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)' }}
+                          placeholder="0"
+                        />
+                        <span className="text-gray-400 text-sm">%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Auto-balance */}
+                <button id="auto-balance-btn" onClick={autoBalance}
+                        className="w-full py-2 rounded-xl text-xs font-semibold text-violet-400 hover:text-violet-300 transition-all"
+                        style={{ background: 'rgba(124,58,237,0.08)', border: '1px dashed rgba(124,58,237,0.3)' }}>
+                  ↺ Split Evenly (auto-balance)
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* Error */}
+          {error && <p className="text-rose-400 text-sm animate-fade-in-up" role="alert">⚠ {error}</p>}
+
+          {/* Submit */}
+          <button id="add-expense-submit" onClick={handleSubmit} disabled={isLoading}
+                  className="btn-brand w-full py-3">
+            {isLoading ? (
+              <>
+                <svg className="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+                Adding…
+              </>
+            ) : splitMode === 'custom' && customType === 'pooled'
+                ? `✓ Log ${Object.values(getShares()).filter(v => v > 0).length} Contributions`
+                : '✓ Add Expense'
+            }
+          </button>
         </div>
-
-        {/* Error */}
-        {error && (
-          <p className="text-rose-400 text-sm" role="alert">⚠ {error}</p>
-        )}
-
-        {/* Submit */}
-        <button id="add-expense-submit" onClick={handleSubmit} disabled={isLoading}
-                className="btn-brand w-full py-3">
-          {isLoading ? (
-            <>
-              <svg className="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-              </svg>
-              Adding…
-            </>
-          ) : '✓ Add Expense'}
-        </button>
       </div>
     </div>
   );
@@ -269,11 +518,7 @@ export default function TripDashboard() {
     try {
       const res = await fetch(`/api/trips/${tripId}`);
       if (!res.ok) {
-        if (res.status === 404) {
-          setError('Trip not found. The link may be invalid.');
-        } else {
-          setError('Failed to load trip data');
-        }
+        setError(res.status === 404 ? 'Trip not found. The link may be invalid.' : 'Failed to load trip data');
         return;
       }
       const json: TripResponse = await res.json();
@@ -285,9 +530,7 @@ export default function TripDashboard() {
     }
   }, [tripId]);
 
-  useEffect(() => {
-    fetchTrip();
-  }, [fetchTrip]);
+  useEffect(() => { fetchTrip(); }, [fetchTrip]);
 
   const handleExpenseAdded = () => {
     setShowModal(false);
@@ -296,14 +539,12 @@ export default function TripDashboard() {
   };
 
   const handleDeleteExpense = async (expId: string) => {
-    // Optimistic removal
     setData((prev) => {
       if (!prev) return prev;
-      const updated = prev.expenses.filter((e) => e._id !== expId);
-      return { ...prev, expenses: updated };
+      return { ...prev, expenses: prev.expenses.filter((e) => e._id !== expId) };
     });
     await fetch(`/api/trips/${tripId}/expenses/${expId}`, { method: 'DELETE' });
-    fetchTrip(); // re-sync settlements
+    fetchTrip();
   };
 
   const copyCode = () => {
@@ -314,7 +555,6 @@ export default function TripDashboard() {
     });
   };
 
-  // ── Loading ──────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <main className="min-h-dvh flex items-center justify-center">
@@ -331,18 +571,14 @@ export default function TripDashboard() {
       <main className="min-h-dvh flex items-center justify-center px-4">
         <div className="glass-card p-6 text-center max-w-sm">
           <p className="text-rose-400 font-medium mb-4">{error || 'Unknown error'}</p>
-          <button onClick={() => router.push('/')} className="btn-brand">
-            ← Back Home
-          </button>
+          <button onClick={() => router.push('/')} className="btn-brand">← Back Home</button>
         </div>
       </main>
     );
   }
 
   const { trip, expenses, settlements, totalSpent } = data;
-  const perPersonAvg = trip.participants.length > 0
-    ? totalSpent / trip.participants.length
-    : 0;
+  const perPersonAvg = trip.participants.length > 0 ? totalSpent / trip.participants.length : 0;
 
   return (
     <main
@@ -403,16 +639,14 @@ export default function TripDashboard() {
           ))}
         </div>
 
-        {/* ── Settlements Dashboard ──────────────────────────────────────── */}
+        {/* ── Settlements ────────────────────────────────────────────────── */}
         <div className="glass-card p-5">
           <h2 className="text-base font-bold text-white mb-1 flex items-center gap-2">
             <span className="text-violet-400">⚖</span> Who Owes Who
           </h2>
           {settlements.length === 0 ? (
             <p className="text-gray-500 text-sm py-2">
-              {expenses.length === 0
-                ? 'Add expenses to see settlements.'
-                : '🎉 All settled up!'}
+              {expenses.length === 0 ? 'Add expenses to see settlements.' : '🎉 All settled up!'}
             </p>
           ) : (
             <div>
@@ -423,7 +657,7 @@ export default function TripDashboard() {
           )}
         </div>
 
-        {/* ── Expense Log ───────────────────────────────────────────────── */}
+        {/* ── Expense Log ────────────────────────────────────────────────── */}
         <div>
           <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
             <span className="text-amber-400">🧾</span> Expense Log

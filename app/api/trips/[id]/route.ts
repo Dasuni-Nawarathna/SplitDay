@@ -24,13 +24,17 @@ export async function GET(_req: NextRequest, { params }: Params) {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Normalise Mongoose docs → plain objects (convert Map → plain object)
+    // Normalise Mongoose docs → plain objects
+    // After .lean(), customShares is a plain JS object (not a Map), so
+    // we just cast it directly. Guard against null/undefined.
     const normalisedExpenses = expenses.map((exp) => ({
       ...exp,
       _id: exp._id.toString(),
       tripId: exp.tripId.toString(),
       customShares: exp.customShares
-        ? Object.fromEntries(exp.customShares as unknown as Map<string, number>)
+        ? (exp.customShares instanceof Map
+            ? Object.fromEntries(exp.customShares)
+            : (exp.customShares as Record<string, number>))
         : undefined,
     }));
 
