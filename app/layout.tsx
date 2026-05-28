@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import { AuthProvider } from '@/lib/auth-context';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -10,8 +11,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: 'SplitDay – Group Expense Tracker',
-  description:
-    'SplitDay helps you track group expenses on trips and outings without any sign-up. Generate a room, add expenses, and let SplitDay calculate who owes who.',
+  description: 'Track group expenses on trips and outings. No complex setup — just create an account, start an outing, and let SplitDay handle the math.',
   keywords: ['expense tracker', 'group expenses', 'trip expenses', 'split bills'],
   openGraph: {
     title: 'SplitDay – Group Expense Tracker',
@@ -20,15 +20,13 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${inter.variable} h-full`} suppressHydrationWarning>
       <body className="min-h-full bg-gray-950 text-white antialiased">
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
