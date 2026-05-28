@@ -110,8 +110,8 @@ interface AddExpenseModalProps {
   onAdded: () => void;
 }
 
-type SplitMode = 'equal' | 'custom';
-// 'one-paid' = one person fronted the whole bill, others owe their %
+type SplitMode = 'equal' | 'custom' | 'amount';
+// 'one-paid' = one person fronted the whole bill, others owe their % or amount
 // 'pooled'   = everyone paid their own portion directly (no one owes anyone)
 type CustomType = 'one-paid' | 'pooled';
 
@@ -137,24 +137,53 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
     return init;
   });
 
+  // Custom Amount mode: exact amount per person
+  const [customAmounts, setCustomAmounts] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    participants.forEach((p) => {
+      init[p] = '';
+    });
+    return init;
+  });
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const amt = parseFloat(amount) || 0;
-
   // ── Derived ────────────────────────────────────────────────────────────────
+  const totalAllocatedAmount = participants.reduce(
+    (sum, p) => sum + (parseFloat(customAmounts[p] ?? '0') || 0), 0
+  );
+
+  const amt = splitMode === 'amount' && customType === 'pooled' ? totalAllocatedAmount : (parseFloat(amount) || 0);
+
   const totalPct = participants.reduce(
     (sum, p) => sum + (parseFloat(percentages[p] ?? '0') || 0), 0
   );
   const pctRemaining = Math.round((100 - totalPct) * 10) / 10;
-  const isBalanced = Math.abs(totalPct - 100) < 0.01;
+
+  const amtRemaining = Math.round((amt - totalAllocatedAmount) * 100) / 100;
+
+  const isBalanced = splitMode === 'equal'
+    ? true
+    : splitMode === 'custom'
+      ? Math.abs(totalPct - 100) < 0.01
+      : customType === 'pooled'
+        ? totalAllocatedAmount > 0
+        : Math.abs(totalAllocatedAmount - amt) < 0.01;
 
   const getShares = (): Record<string, number> => {
     const shares: Record<string, number> = {};
-    participants.forEach((p) => {
-      const pct = parseFloat(percentages[p] ?? '0') || 0;
-      if (pct > 0) shares[p] = Math.round((amt * pct / 100) * 100) / 100;
-    });
+    if (splitMode === 'custom') {
+      participants.forEach((p) => {
+        const pct = parseFloat(percentages[p] ?? '0') || 0;
+        if (pct > 0) shares[p] = Math.round((amt * pct / 100) * 100) / 100;
+      });
+    } else if (splitMode === 'amount') {
+      participants.forEach((p) => {
+        const val = parseFloat(customAmounts[p] ?? '0') || 0;
+        if (val > 0) shares[p] = Math.round(val * 100) / 100;
+      });
+    }
     return shares;
   };
 
@@ -167,22 +196,38 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
   const updatePct = (name: string, val: string) =>
     setPercentages((prev) => ({ ...prev, [name]: val }));
 
+  const updateAmount = (name: string, val: string) =>
+    setCustomAmounts((prev) => ({ ...prev, [name]: val }));
+
   const autoBalance = () => {
-    const n = participants.length;
-    if (n === 0) return;
-    const each = Math.floor(100 / n);
-    const next: Record<string, string> = {};
-    participants.forEach((p, i) => {
-      next[p] = String(i === n - 1 ? each + (100 - each * n) : each);
-    });
-    setPercentages(next);
+    if (splitMode === 'custom') {
+      const n = participants.length;
+      if (n === 0) return;
+      const each = Math.floor(100 / n);
+      const next: Record<string, string> = {};
+      participants.forEach((p, i) => {
+        next[p] = String(i === n - 1 ? each + (100 - each * n) : each);
+      });
+      setPercentages(next);
+    } else if (splitMode === 'amount') {
+      const n = participants.length;
+      if (n === 0 || amt <= 0) return;
+      const each = Math.floor((amt / n) * 100) / 100;
+      const next: Record<string, string> = {};
+      participants.forEach((p, i) => {
+        next[p] = i === n - 1
+          ? (amt - each * (n - 1)).toFixed(2)
+          : each.toFixed(2);
+      });
+      setCustomAmounts(next);
+    }
   };
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     setError('');
     if (!description.trim()) return setError('Description is required');
-    if (!amount || isNaN(amt) || amt <= 0) return setError('Enter a valid amount');
+    if (amt <= 0) return setError('Enter a valid amount');
 
     setIsLoading(true);
     try {
@@ -200,14 +245,18 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
         if (!res.ok) { setError(data.error ?? 'Failed to add expense'); setIsLoading(false); return; }
 
       } else if (customType === 'one-paid') {
-        // One person fronted the full bill; others owe their custom %
+        // One person fronted the full bill; others owe their custom % or amount
         if (!isBalanced) {
-          setError(`Percentages must total 100% (currently ${totalPct.toFixed(1)}%)`);
+          if (splitMode === 'custom') {
+            setError(`Percentages must total 100% (currently ${totalPct.toFixed(1)}%)`);
+          } else {
+            setError(`Allocated amounts ($${totalAllocatedAmount.toFixed(2)}) must equal total amount ($${amt.toFixed(2)})`);
+          }
           setIsLoading(false); return;
         }
         const shares = getShares();
         if (Object.keys(shares).length === 0) {
-          setError('At least one person needs a share > 0%'); setIsLoading(false); return;
+          setError('At least one person needs a share > 0'); setIsLoading(false); return;
         }
         const res = await fetch(`/api/trips/${tripId}/expenses`, {
           method: 'POST',
@@ -222,15 +271,18 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
 
       } else {
         // Pooled: each person paid their own portion → submit one expense per person
-        // Each person is both payer and the one who owes → net = $0, no settlements
         if (!isBalanced) {
-          setError(`Percentages must total 100% (currently ${totalPct.toFixed(1)}%)`);
+          if (splitMode === 'custom') {
+            setError(`Percentages must total 100% (currently ${totalPct.toFixed(1)}%)`);
+          } else {
+            setError('Enter at least one amount > 0');
+          }
           setIsLoading(false); return;
         }
         const shares = getShares();
         const contributors = Object.entries(shares).filter(([, v]) => v > 0);
         if (contributors.length === 0) {
-          setError('At least one person needs a share > 0%'); setIsLoading(false); return;
+          setError('At least one person needs a share > 0'); setIsLoading(false); return;
         }
         const results = await Promise.all(
           contributors.map(([name, shareAmt]) =>
@@ -261,9 +313,15 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
   };
 
   // ── UI helpers ─────────────────────────────────────────────────────────────
-  const barColour = isBalanced ? '#10b981' : totalPct > 100 ? '#f43f5e' : '#f59e0b';
-  const barWidth = Math.min(totalPct, 100);
-  const showPaidBy = splitMode === 'equal' || (splitMode === 'custom' && customType === 'one-paid');
+  const barColour = splitMode === 'custom'
+    ? (isBalanced ? '#10b981' : totalPct > 100 ? '#f43f5e' : '#f59e0b')
+    : (isBalanced ? '#10b981' : totalAllocatedAmount > amt ? '#f43f5e' : '#f59e0b');
+
+  const barWidth = splitMode === 'custom'
+    ? Math.min(totalPct, 100)
+    : amt > 0 ? Math.min((totalAllocatedAmount / amt) * 100, 100) : 0;
+
+  const showPaidBy = splitMode === 'equal' || customType === 'one-paid';
 
   return (
     <div
@@ -297,17 +355,21 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
 
           {/* Amount */}
           <div className="space-y-1">
-            <label className="text-sm text-gray-400">Total Amount ($)</label>
+            <label className="text-sm text-gray-400">
+              {splitMode === 'amount' && customType === 'pooled' ? 'Total Amount ($) — Auto-calculated' : 'Total Amount ($)'}
+            </label>
             <input id="expense-amount" type="number" className="input-field"
                    placeholder="0.00" min="0.01" step="0.01"
-                   value={amount} onChange={(e) => setAmount(e.target.value)} />
+                   disabled={splitMode === 'amount' && customType === 'pooled'}
+                   value={splitMode === 'amount' && customType === 'pooled' ? totalAllocatedAmount.toFixed(2) : amount}
+                   onChange={(e) => setAmount(e.target.value)} />
           </div>
 
           {/* Paid By — hidden when everyone chips in their own */}
           {showPaidBy && (
             <div className="space-y-1 animate-fade-in-up">
               <label className="text-sm text-gray-400">
-                {splitMode === 'custom' ? 'Who fronted the full amount?' : 'Paid By'}
+                {splitMode !== 'equal' ? 'Who fronted the full amount?' : 'Paid By'}
               </label>
               <select id="expense-paid-by" className="input-field"
                       value={paidBy} onChange={(e) => setPaidBy(e.target.value)}>
@@ -321,21 +383,25 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
           {/* ── Split Mode Toggle ──────────────────────────────────────── */}
           <div className="space-y-3">
             <label className="text-sm text-gray-400">How to Split?</label>
-            <div className="grid grid-cols-2 gap-2">
-              {(['equal', 'custom'] as SplitMode[]).map((mode) => (
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { key: 'equal' as SplitMode, label: '⚖ Equal' },
+                { key: 'custom' as SplitMode, label: '✏ Custom %' },
+                { key: 'amount' as SplitMode, label: '💵 Custom $' },
+              ].map(({ key, label }) => (
                 <button
-                  key={mode}
-                  id={`split-mode-${mode}`}
-                  onClick={() => setSplitMode(mode)}
-                  className="py-2.5 px-3 rounded-xl text-sm font-semibold transition-all"
+                  key={key}
+                  id={`split-mode-${key}`}
+                  onClick={() => setSplitMode(key)}
+                  className="py-2.5 px-1 rounded-xl text-xs font-semibold transition-all"
                   style={{
-                    background: splitMode === mode ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : 'rgba(255,255,255,0.04)',
-                    border: `1px solid ${splitMode === mode ? '#7c3aed' : 'rgba(255,255,255,0.08)'}`,
-                    color: splitMode === mode ? '#fff' : '#9ca3af',
-                    boxShadow: splitMode === mode ? '0 4px 14px rgba(124,58,237,0.3)' : 'none',
+                    background: splitMode === key ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${splitMode === key ? '#7c3aed' : 'rgba(255,255,255,0.08)'}`,
+                    color: splitMode === key ? '#fff' : '#9ca3af',
+                    boxShadow: splitMode === key ? '0 4px 14px rgba(124,58,237,0.3)' : 'none',
                   }}
                 >
-                  {mode === 'equal' ? '⚖ Equal Split' : '✏ Custom %'}
+                  {label}
                 </button>
               ))}
             </div>
@@ -370,14 +436,14 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
               </div>
             )}
 
-            {/* ── Custom %: sub-type + rows ────────────────────────────── */}
-            {splitMode === 'custom' && (
+            {/* ── Custom % or Custom Amount: sub-type + rows ──────────────── */}
+            {splitMode !== 'equal' && (
               <div className="space-y-3">
 
                 {/* Who-paid sub-toggle */}
                 <div className="grid grid-cols-2 gap-2">
                   {([
-                    { key: 'one-paid' as CustomType, label: '👤 One person paid', hint: 'Others owe their %' },
+                    { key: 'one-paid' as CustomType, label: '👤 One person paid', hint: splitMode === 'custom' ? 'Others owe their %' : 'Others owe their $' },
                     { key: 'pooled'   as CustomType, label: '🤝 Everyone chipped in', hint: 'Each paid their own' },
                   ]).map(({ key, label, hint }) => (
                     <button
@@ -402,34 +468,50 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
                        style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
                     <span className="text-emerald-400 text-sm mt-0.5">✓</span>
                     <p className="text-emerald-300 text-xs leading-relaxed">
-                      Each person&apos;s % is what <strong>they already paid</strong>. No one owes anyone — automatically settled!
+                      Each person&apos;s {splitMode === 'custom' ? 'percentage' : 'amount'} is what <strong>they already paid</strong>. No one owes anyone — automatically settled!
                     </p>
                   </div>
                 )}
 
                 {/* Progress bar */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-gray-400">Total allocated</span>
-                    <span style={{ color: barColour }} className="font-bold">
-                      {totalPct.toFixed(1)}%
-                      {!isBalanced && pctRemaining !== 0 && (
-                        <span className="text-gray-500 font-normal ml-1">
-                          ({pctRemaining > 0 ? `+${pctRemaining}` : pctRemaining}% remaining)
+                {!(splitMode === 'amount' && customType === 'pooled') && (
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-gray-400">Total allocated</span>
+                      {splitMode === 'custom' ? (
+                        <span style={{ color: barColour }} className="font-bold">
+                          {totalPct.toFixed(1)}%
+                          {!isBalanced && pctRemaining !== 0 && (
+                            <span className="text-gray-500 font-normal ml-1">
+                              ({pctRemaining > 0 ? `+${pctRemaining}` : pctRemaining}% remaining)
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span style={{ color: barColour }} className="font-bold">
+                          ${totalAllocatedAmount.toFixed(2)} / ${amt.toFixed(2)}
+                          {!isBalanced && amtRemaining !== 0 && (
+                            <span className="text-gray-500 font-normal ml-1">
+                              ({amtRemaining > 0 ? `+$${amtRemaining.toFixed(2)}` : `-$${Math.abs(amtRemaining).toFixed(2)}`} remaining)
+                            </span>
+                          )}
                         </span>
                       )}
-                    </span>
+                    </div>
+                    <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      <div className="h-full rounded-full transition-all duration-300"
+                           style={{ width: `${barWidth}%`, background: barColour }} />
+                    </div>
                   </div>
-                  <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                    <div className="h-full rounded-full transition-all duration-300"
-                         style={{ width: `${barWidth}%`, background: barColour }} />
-                  </div>
-                </div>
+                )}
 
-                {/* Per-person % rows */}
+                {/* Per-person rows */}
                 {participants.map((p) => {
                   const pct = parseFloat(percentages[p] ?? '0') || 0;
-                  const personAmt = amt > 0 ? amt * pct / 100 : 0;
+                  const personAmt = splitMode === 'custom'
+                    ? (amt > 0 ? amt * pct / 100 : 0)
+                    : (parseFloat(customAmounts[p] ?? '0') || 0);
+
                   return (
                     <div key={p} className="flex items-center gap-3 p-3 rounded-xl"
                          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
@@ -446,16 +528,33 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
                         )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
-                        <input
-                          id={`pct-input-${p}`}
-                          type="number" min="0" max="100" step="1"
-                          value={percentages[p] ?? ''}
-                          onChange={(e) => updatePct(p, e.target.value)}
-                          className="w-16 text-right text-sm font-bold text-white rounded-lg px-2 py-1.5 outline-none"
-                          style={{ background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)' }}
-                          placeholder="0"
-                        />
-                        <span className="text-gray-400 text-sm">%</span>
+                        {splitMode === 'custom' ? (
+                          <>
+                            <input
+                              id={`pct-input-${p}`}
+                              type="number" min="0" max="100" step="1"
+                              value={percentages[p] ?? ''}
+                              onChange={(e) => updatePct(p, e.target.value)}
+                              className="w-16 text-right text-sm font-bold text-white rounded-lg px-2 py-1.5 outline-none"
+                              style={{ background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)' }}
+                              placeholder="0"
+                            />
+                            <span className="text-gray-400 text-sm">%</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-gray-400 text-sm">$</span>
+                            <input
+                              id={`amt-input-${p}`}
+                              type="number" min="0" step="0.01"
+                              value={customAmounts[p] ?? ''}
+                              onChange={(e) => updateAmount(p, e.target.value)}
+                              className="w-20 text-right text-sm font-bold text-white rounded-lg px-2 py-1.5 outline-none"
+                              style={{ background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)' }}
+                              placeholder="0.00"
+                            />
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -485,7 +584,7 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
                 </svg>
                 Adding…
               </>
-            ) : splitMode === 'custom' && customType === 'pooled'
+            ) : splitMode !== 'equal' && customType === 'pooled'
                 ? `✓ Log ${Object.values(getShares()).filter(v => v > 0).length} Contributions`
                 : '✓ Add Expense'
             }
