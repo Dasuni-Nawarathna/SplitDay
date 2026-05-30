@@ -3,6 +3,8 @@ import { connectToDatabase } from '@/lib/mongodb';
 import Trip from '@/models/Trip';
 import Expense from '@/models/Expense';
 
+import { getAuthUser } from '@/lib/auth';
+
 type Params = { params: Promise<{ id: string }> };
 
 // ── GET /api/trips/[id]/expenses ─────────────────────────────────────────────
@@ -47,12 +49,21 @@ export async function GET(_req: NextRequest, { params }: Params) {
 // Returns: { expense: ExpenseData }
 export async function POST(req: NextRequest, { params }: Params) {
   try {
+    const user = await getAuthUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     await connectToDatabase();
     const { id } = await params;
 
     const trip = await Trip.findById(id).lean();
     if (!trip) {
       return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
+    }
+
+    if (trip.userId.toString() !== user.userId) {
+      return NextResponse.json({ error: 'Forbidden: Only the trip owner can log expenses' }, { status: 403 });
     }
 
     const body = await req.json();
