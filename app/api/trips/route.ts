@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import Trip from '@/models/Trip';
 import { getAuthUser } from '@/lib/auth';
+import { Types } from 'mongoose';
 
 // ── GET /api/trips — list all trips for logged-in user ───────────────────────
 export async function GET() {
@@ -10,10 +11,11 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     await connectDB();
+    const userObjectId = new Types.ObjectId(user.userId);
     const trips = await Trip.find({
       $or: [
-        { userId: user.userId },
-        { userIds: user.userId },
+        { userId: userObjectId },
+        { userIds: userObjectId },
       ],
     }).sort({ createdAt: -1 }).lean();
     return NextResponse.json({ trips });

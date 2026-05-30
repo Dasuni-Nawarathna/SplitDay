@@ -27,9 +27,11 @@ export async function POST(req: NextRequest) {
 
     const userObjectId = new Types.ObjectId(user.userId);
 
-    // Initialize userIds if it doesn't exist
-    if (!trip.userIds) {
+    // Ensure userIds is initialized as an array of ObjectIds
+    if (!trip.userIds || !Array.isArray(trip.userIds)) {
       trip.userIds = [trip.userId];
+    } else if (trip.userIds.length === 0) {
+      trip.userIds.push(trip.userId);
     }
 
     // Add user to userIds if they aren't already in it
@@ -38,6 +40,10 @@ export async function POST(req: NextRequest) {
 
     if (!isAlreadyMember) {
       trip.userIds.push(userObjectId);
+      trip.markModified('userIds');
+      await trip.save();
+    } else {
+      trip.markModified('userIds');
       await trip.save();
     }
 
