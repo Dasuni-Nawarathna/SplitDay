@@ -26,14 +26,18 @@ export default function Dashboard() {
 
   const [trips, setTrips] = useState<Trip[]>([]);
   const [tripsLoading, setTripsLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
+  const [formMode, setFormMode] = useState<'create' | 'join' | null>(null);
 
-  // Form state
+  // Create Form state
   const [outingName, setOutingName] = useState('');
   const [nameInput, setNameInput] = useState('');
   const [participants, setParticipants] = useState<string[]>([]);
   const [formError, setFormError] = useState('');
   const [creating, setCreating] = useState(false);
+
+  // Join Form state
+  const [inviteCode, setInviteCode] = useState('');
+  const [joining, setJoining] = useState(false);
 
   // Redirect to auth if not logged in
   useEffect(() => {
@@ -94,11 +98,33 @@ export default function Dashboard() {
     }
   };
 
+  const handleJoin = async () => {
+    setFormError('');
+    if (!inviteCode.trim()) { setFormError('Enter an invite code'); return; }
+
+    setJoining(true);
+    try {
+      const res = await fetch('/api/trips/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inviteCode: inviteCode.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setFormError(data.error ?? 'Failed to join outing'); return; }
+      router.push(`/trip/${data.tripId}`);
+    } catch {
+      setFormError('Network error – please try again');
+    } finally {
+      setJoining(false);
+    }
+  };
+
   const resetForm = () => {
-    setShowForm(false);
+    setFormMode(null);
     setOutingName('');
     setNameInput('');
     setParticipants([]);
+    setInviteCode('');
     setFormError('');
   };
 
@@ -135,8 +161,8 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* ── New Outing Form (slide-in) ───────────────────────────────────── */}
-        {showForm ? (
+        {/* ── Action Box ─────────────────────────────────────────────────── */}
+        {formMode === 'create' && (
           <div className="glass-card p-5 space-y-4 animate-fade-in-up">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-white">New Outing</h2>
@@ -214,7 +240,7 @@ export default function Dashboard() {
             >
               {creating ? (
                 <>
-                  <svg className="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin w-4 h-4 mr-2 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                   </svg>
@@ -223,14 +249,74 @@ export default function Dashboard() {
               ) : '🚀 Start Outing'}
             </button>
           </div>
-        ) : (
-          <button
-            id="new-outing-btn"
-            onClick={() => setShowForm(true)}
-            className="btn-brand w-full py-3 text-base"
-          >
-            + New Outing
-          </button>
+        )}
+
+        {formMode === 'join' && (
+          <div className="glass-card p-5 space-y-4 animate-fade-in-up">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-white">Join Outing</h2>
+              <button onClick={resetForm} className="text-gray-500 hover:text-white transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm text-gray-400">Invite Code</label>
+              <input
+                id="invite-code-input"
+                type="text"
+                className="input-field uppercase"
+                placeholder="e.g. TRIP-1234"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                maxLength={20}
+              />
+            </div>
+
+            {formError && <p className="text-rose-400 text-sm animate-fade-in-up">⚠ {formError}</p>}
+
+            <button
+              id="join-outing-btn"
+              onClick={handleJoin}
+              disabled={joining}
+              className="btn-brand w-full py-3"
+            >
+              {joining ? (
+                <>
+                  <svg className="animate-spin w-4 h-4 mr-2 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                  Joining…
+                </>
+              ) : '🔑 Join Outing'}
+            </button>
+          </div>
+        )}
+
+        {formMode === null && (
+          <div className="grid grid-cols-2 gap-3 animate-fade-in-up">
+            <button
+              id="new-outing-btn"
+              onClick={() => setFormMode('create')}
+              className="btn-brand py-3 text-sm font-semibold"
+            >
+              🚀 Start Outing
+            </button>
+            <button
+              id="join-outing-mode-btn"
+              onClick={() => setFormMode('join')}
+              className="py-3 px-4 rounded-xl text-sm font-semibold text-gray-300 hover:text-white transition-all"
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+              }}
+            >
+              🔑 Join Outing
+            </button>
+          </div>
         )}
 
         {/* ── My Outings ──────────────────────────────────────────────────── */}

@@ -10,7 +10,12 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     await connectDB();
-    const trips = await Trip.find({ userId: user.userId }).sort({ createdAt: -1 }).lean();
+    const trips = await Trip.find({
+      $or: [
+        { userId: user.userId },
+        { userIds: user.userId },
+      ],
+    }).sort({ createdAt: -1 }).lean();
     return NextResponse.json({ trips });
   } catch (err) {
     console.error('[GET /api/trips]', err);
@@ -52,6 +57,7 @@ export async function POST(req: NextRequest) {
       if (existing) continue;
       trip = await Trip.create({
         userId: user.userId,
+        userIds: [user.userId],
         name: name.trim(),
         inviteCode,
         participants: cleanParticipants,

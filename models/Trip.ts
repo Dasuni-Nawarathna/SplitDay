@@ -2,6 +2,7 @@ import mongoose, { Schema, Document, Model, models, Types } from 'mongoose';
 
 export interface ITrip extends Document {
   userId: Types.ObjectId;
+  userIds?: Types.ObjectId[];
   name: string;
   inviteCode: string;
   participants: string[];
@@ -15,6 +16,11 @@ const TripSchema = new Schema<ITrip>(
       ref: 'User',
       required: [true, 'User ID is required'],
       index: true,
+    },
+    userIds: {
+      type: [Schema.Types.ObjectId],
+      ref: 'User',
+      default: [],
     },
     name: {
       type: String,
