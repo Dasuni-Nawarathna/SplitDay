@@ -21,7 +21,7 @@ function avatarColour(name: string) {
 }
 
 export default function Dashboard() {
-  const { user, isLoading: authLoading, logout } = useAuth();
+  const { user, isLoading: authLoading, logout, refresh } = useAuth();
   const router = useRouter();
 
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -38,6 +38,21 @@ export default function Dashboard() {
   // Join Form state
   const [inviteCode, setInviteCode] = useState('');
   const [joining, setJoining] = useState(false);
+
+  // Profile Modal state
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileName, setProfileName] = useState(user?.name ?? '');
+  const [profilePic, setProfilePic] = useState(user?.profilePicture ?? '');
+  const [profileError, setProfileError] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Sync state with user context updates
+  useEffect(() => {
+    if (user) {
+      setProfileName(user.name);
+      setProfilePic(user.profilePicture || '');
+    }
+  }, [user]);
 
   // Redirect to auth if not logged in
   useEffect(() => {
@@ -119,6 +134,51 @@ export default function Dashboard() {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1024 * 1024) {
+      setProfileError('Image must be less than 1MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProfilePic(reader.result as string);
+      setProfileError('');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveProfile = async () => {
+    setProfileError('');
+    if (!profileName.trim()) {
+      setProfileError('Name is required');
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      const res = await fetch('/api/auth/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: profileName.trim(), profilePicture: profilePic }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setProfileError(data.error ?? 'Failed to update profile');
+        return;
+      }
+      await refresh();
+      setShowProfileModal(false);
+    } catch {
+      setProfileError('Network error – please try again');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   const resetForm = () => {
     setFormMode(null);
     setOutingName('');
@@ -145,11 +205,33 @@ export default function Dashboard() {
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-extrabold gradient-text">SplitDay</h1>
-            <p className="text-gray-400 text-xs mt-0.5">
-              Hey, <span className="text-violet-300 font-medium">{user?.name}</span> 👋
-            </p>
+          <div className="flex items-center gap-3">
+            {/* Avatar image/button */}
+            <button
+              onClick={() => setShowProfileModal(true)}
+              className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0 border border-violet-500/30 hover:border-violet-400 transition-colors"
+              title="Edit Profile"
+            >
+              {user?.profilePicture ? (
+                <img src={user.profilePicture} alt={user.name} className="w-full h-full object-cover" />
+              ) : (
+                <div
+                  className="w-full h-full flex items-center justify-center text-white font-bold text-sm"
+                  style={{ background: 'linear-gradient(135deg, #7c3aed, #db2777)' }}
+                >
+                  {user?.name?.[0]?.toUpperCase()}
+                </div>
+              )}
+            </button>
+            <div>
+              <h1 className="text-xl font-extrabold gradient-text leading-tight">SplitDay</h1>
+              <p
+                onClick={() => setShowProfileModal(true)}
+                className="text-gray-400 text-xs mt-0.5 hover:text-violet-300 cursor-pointer transition-colors"
+              >
+                Hey, <span className="text-violet-300 font-medium">{user?.name}</span> 👋
+              </p>
+            </div>
           </div>
           <button
             id="logout-btn"
@@ -392,6 +474,94 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* ── Edit Profile Modal ───────────────────────────────────────────── */}
+      {showProfileModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowProfileModal(false); }}
+        >
+          <div
+            className="glass-card w-full max-w-sm animate-fade-in-up p-6 space-y-5"
+            style={{ borderRadius: '1.5rem' }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-white">Edit Profile</h2>
+              <button onClick={() => setShowProfileModal(false)} className="text-gray-500 hover:text-white transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Profile Pic Upload */}
+            <div className="flex flex-col items-center gap-3">
+              <div className="relative group w-24 h-24 rounded-full overflow-hidden border-2 border-violet-500/40">
+                {profilePic ? (
+                  <img src={profilePic} alt="Preview" className="w-full h-full object-cover" />
+                ) : (
+                  <div
+                    className="w-full h-full flex items-center justify-center text-white font-extrabold text-3xl"
+                    style={{ background: 'linear-gradient(135deg, #7c3aed, #db2777)' }}
+                  >
+                    {profileName?.[0]?.toUpperCase() || '?'}
+                  </div>
+                )}
+                {/* Upload Overlay */}
+                <label className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 text-white">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+                  </svg>
+                  <span className="text-[10px] text-white font-medium mt-1">Change</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+                </label>
+              </div>
+              <p className="text-[10px] text-gray-500">Supports JPG, PNG (Max 1MB)</p>
+            </div>
+
+            {/* Form Fields */}
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs text-gray-400">Full Name</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  placeholder="Your Name"
+                />
+              </div>
+
+              {profileError && <p className="text-rose-400 text-xs animate-fade-in-up">⚠ {profileError}</p>}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => setShowProfileModal(false)}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-gray-400 hover:text-white transition-colors"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={savingProfile}
+                  className="flex-1 btn-brand py-2.5 text-xs font-semibold"
+                >
+                  {savingProfile ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
