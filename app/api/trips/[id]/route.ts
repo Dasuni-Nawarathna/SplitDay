@@ -54,7 +54,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     return NextResponse.json(
       {
-        trip: { ...trip, _id: trip._id.toString() },
+        trip: {
+          ...trip,
+          _id: trip._id.toString(),
+          userId: trip.userId.toString(),
+          userIds: trip.userIds ? trip.userIds.map((uid) => uid.toString()) : [],
+        },
         expenses: normalisedExpenses,
         settlements,
         totalSpent: Math.round(totalSpent * 100) / 100,

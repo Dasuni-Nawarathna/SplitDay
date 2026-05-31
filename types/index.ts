@@ -5,6 +5,7 @@ import { Types } from 'mongoose';
 export interface TripData {
   _id: string;
   userId: string;
+  userIds?: string[];
   name: string;
   inviteCode: string;
   participants: string[];

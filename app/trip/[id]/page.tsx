@@ -5,6 +5,16 @@ import { useParams, useRouter } from 'next/navigation';
 import type { TripResponse, ExpenseData } from '@/types';
 import { useAuth } from '@/lib/auth-context';
 
+interface CommentData {
+  _id: string;
+  tripId: string;
+  userId: string;
+  userName: string;
+  userProfilePicture?: string;
+  text: string;
+  createdAt: string;
+}
+
 // ── Colour palette for participant avatars ────────────────────────────────────
 const AVATAR_COLOURS = [
   '#7c3aed', '#db2777', '#0891b2', '#059669',
@@ -613,6 +623,11 @@ export default function TripDashboard() {
   const [showModal, setShowModal] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Comments state
+  const [comments, setComments] = useState<CommentData[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [postingComment, setPostingComment] = useState(false);
+
   // Phase 5: Persist session in localStorage
   useEffect(() => {
     if (tripId) localStorage.setItem('splitday_active_trip', tripId);
@@ -634,7 +649,22 @@ export default function TripDashboard() {
     }
   }, [tripId]);
 
-  useEffect(() => { fetchTrip(); }, [fetchTrip]);
+  const fetchComments = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/trips/${tripId}/comments`);
+      if (res.ok) {
+        const json = await res.json();
+        setComments(json.comments || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch comments', err);
+    }
+  }, [tripId]);
+
+  useEffect(() => {
+    fetchTrip();
+    fetchComments();
+  }, [fetchTrip, fetchComments]);
 
   const handleExpenseAdded = () => {
     setShowModal(false);
@@ -657,6 +687,28 @@ export default function TripDashboard() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const handlePostComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim() || postingComment) return;
+
+    setPostingComment(true);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: newComment.trim() }),
+      });
+      if (res.ok) {
+        setNewComment('');
+        fetchComments();
+      }
+    } catch (err) {
+      console.error('Failed to post comment', err);
+    } finally {
+      setPostingComment(false);
+    }
   };
 
   if (isLoading) {
@@ -776,6 +828,68 @@ export default function TripDashboard() {
             expenses.map((exp) => (
               <ExpenseCard key={exp._id} expense={exp} onDelete={handleDeleteExpense} isOwner={isOwner} />
             ))
+          )}
+        </div>
+
+        {/* ── Comments Section ───────────────────────────────────────────── */}
+        <div className="glass-card p-5 space-y-4">
+          <h2 className="text-base font-bold text-white mb-2 flex items-center gap-2">
+            <span className="text-violet-400">💬</span> Chat & Comments
+          </h2>
+
+          {/* Comments List */}
+          <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+            {comments.length === 0 ? (
+              <p className="text-gray-500 text-xs py-4 text-center">No comments yet. Start the conversation!</p>
+            ) : (
+              comments.map((c) => (
+                <div key={c._id} className="flex gap-3 text-sm animate-fade-in-up">
+                  {/* User Avatar */}
+                  <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center shrink-0 border border-violet-500/20 bg-violet-600/30">
+                    {c.userProfilePicture ? (
+                      <img src={c.userProfilePicture} alt={c.userName} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-white font-bold text-xs">{c.userName[0].toUpperCase()}</span>
+                    )}
+                  </div>
+                  {/* Content Bubble */}
+                  <div className="flex-1 bg-white/5 border border-white/5 rounded-2xl px-3.5 py-2 min-w-0">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-semibold text-violet-300 text-xs truncate">{c.userName}</span>
+                      <span className="text-[10px] text-gray-500 shrink-0">
+                        {new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <p className="text-gray-200 text-xs mt-1 whitespace-pre-wrap break-words">{c.text}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Add Comment Input */}
+          {user && (trip.userId === user.userId || (trip.userIds && trip.userIds.some((uid: string) => uid === user.userId))) ? (
+            <form onSubmit={handlePostComment} className="flex gap-2 pt-2 border-t border-white/5">
+              <input
+                type="text"
+                className="input-field py-2 text-xs flex-1"
+                placeholder="Write a comment..."
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                maxLength={400}
+              />
+              <button
+                type="submit"
+                disabled={postingComment || !newComment.trim()}
+                className="btn-brand px-4 py-2 text-xs font-semibold shrink-0"
+              >
+                Send
+              </button>
+            </form>
+          ) : (
+            <p className="text-[10px] text-gray-500 text-center pt-2 border-t border-white/5">
+              Only joined group members can comment.
+            </p>
           )}
         </div>
       </div>
