@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
+import { ThemeProvider } from '@/lib/theme-context';
 import PWARegister from './PWARegister';
 
 const inter = Inter({
@@ -30,11 +31,27 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="apple-touch-icon" href="/icon.png" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                const savedTheme = localStorage.getItem('splitday-theme');
+                if (savedTheme === 'ocean' || savedTheme === 'forest') {
+                  document.documentElement.setAttribute('data-theme', savedTheme);
+                } else {
+                  document.documentElement.setAttribute('data-theme', 'default');
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
       </head>
       <body className="min-h-full bg-gray-950 text-white antialiased">
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </ThemeProvider>
         <PWARegister />
       </body>
     </html>

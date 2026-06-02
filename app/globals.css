@@ -7,20 +7,66 @@
 
 /* ── Design Tokens ───────────────────────────────────────────────────────── */
 @theme inline {
-  --color-brand-primary:   #7c3aed;  /* violet-600 */
-  --color-brand-light:     #a78bfa;  /* violet-400 */
-  --color-brand-dark:      #4c1d95;  /* violet-900 */
+  --color-brand-primary:   var(--color-brand-primary-val);
+  --color-brand-light:     var(--color-brand-light-val);
+  --color-brand-dark:      var(--color-brand-dark-val);
 
-  --color-surface-900:     #0f0f1a;  /* page bg */
-  --color-surface-800:     #1a1a2e;  /* card bg */
-  --color-surface-700:     #242440;  /* elevated card */
-  --color-surface-600:     #2e2e52;  /* input / hover */
+  --color-surface-900:     var(--color-surface-900-val);
+  --color-surface-800:     var(--color-surface-800-val);
+  --color-surface-700:     var(--color-surface-700-val);
+  --color-surface-600:     var(--color-surface-600-val);
 
   --color-accent-emerald:  #10b981;  /* positive balance */
   --color-accent-rose:     #f43f5e;  /* negative balance */
   --color-accent-amber:    #f59e0b;  /* warnings */
 
   --font-sans: var(--font-inter);
+}
+
+/* ── Theme Definitions ───────────────────────────────────────────────────── */
+:root, [data-theme="default"] {
+  --color-brand-primary-val:   #7c3aed;  /* violet-600 */
+  --color-brand-light-val:     #a78bfa;  /* violet-400 */
+  --color-brand-dark-val:      #4c1d95;  /* violet-900 */
+  
+  --color-surface-900-val:     #0f0f1a;  /* page bg */
+  --color-surface-800-val:     #1a1a2e;  /* card bg */
+  --color-surface-700-val:     #242440;  /* elevated card */
+  --color-surface-600-val:     #2e2e52;  /* input / hover */
+
+  --gradient-stop-1: #a78bfa;
+  --gradient-stop-2: #7c3aed;
+  --gradient-stop-3: #ec4899;
+}
+
+[data-theme="ocean"] {
+  --color-brand-primary-val:   #0ea5e9;  /* sky-500 */
+  --color-brand-light-val:     #38bdf8;  /* sky-400 */
+  --color-brand-dark-val:      #0369a1;  /* sky-700 */
+  
+  --color-surface-900-val:     #081b29;  /* page bg */
+  --color-surface-800-val:     #112f45;  /* card bg */
+  --color-surface-700-val:     #1a4361;  /* elevated card */
+  --color-surface-600-val:     #23577d;  /* input / hover */
+
+  --gradient-stop-1: #38bdf8;
+  --gradient-stop-2: #0ea5e9;
+  --gradient-stop-3: #10b981;
+}
+
+[data-theme="forest"] {
+  --color-brand-primary-val:   #10b981;  /* emerald-500 */
+  --color-brand-light-val:     #34d399;  /* emerald-400 */
+  --color-brand-dark-val:      #047857;  /* emerald-700 */
+  
+  --color-surface-900-val:     #022c22;  /* page bg */
+  --color-surface-800-val:     #064e3b;  /* card bg */
+  --color-surface-700-val:     #065f46;  /* elevated card */
+  --color-surface-600-val:     #059669;  /* input / hover */
+
+  --gradient-stop-1: #34d399;
+  --gradient-stop-2: #10b981;
+  --gradient-stop-3: #eab308;
 }
 
 /* ── Base ────────────────────────────────────────────────────────────────── */
@@ -35,7 +81,7 @@ html {
 }
 
 body {
-  background-color: var(--color-surface-900);
+  background-color: var(--color-surface-900-val);
   color: #e2e8f0;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -51,22 +97,22 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #4c1d95;
+  background: var(--color-brand-dark-val);
   border-radius: 9999px;
 }
 
 /* ── Glass Card ──────────────────────────────────────────────────────────── */
 .glass-card {
-  background: rgba(26, 26, 46, 0.7);
+  background: color-mix(in srgb, var(--color-surface-800-val) 70%, transparent);
   backdrop-filter: blur(20px) saturate(1.4);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  border: 1px solid rgba(124, 58, 237, 0.2);
+  border: 1px solid color-mix(in srgb, var(--color-brand-primary-val) 20%, transparent);
   border-radius: 1.25rem;
 }
 
 /* ── Gradient Text ───────────────────────────────────────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 50%, #ec4899 100%);
+  background: linear-gradient(135deg, var(--gradient-stop-1) 0%, var(--gradient-stop-2) 50%, var(--gradient-stop-3) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -79,19 +125,19 @@ body {
   justify-content: center;
   gap: 0.5rem;
   padding: 0.75rem 1.5rem;
-  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  background: linear-gradient(135deg, var(--color-brand-primary-val), var(--color-brand-dark-val));
   color: #fff;
   font-weight: 600;
   border-radius: 0.875rem;
   border: none;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 15px rgba(124, 58, 237, 0.35);
+  box-shadow: 0 4px 15px color-mix(in srgb, var(--color-brand-primary-val) 35%, transparent);
   user-select: none;
 }
 .btn-brand:hover {
-  background: linear-gradient(135deg, #6d28d9, #5b21b6);
-  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.55);
+  background: linear-gradient(135deg, var(--color-brand-dark-val), color-mix(in srgb, var(--color-brand-dark-val) 80%, black));
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--color-brand-primary-val) 55%, transparent);
   transform: translateY(-1px);
 }
 .btn-brand:active {
@@ -107,8 +153,8 @@ body {
 .input-field {
   width: 100%;
   padding: 0.75rem 1rem;
-  background: var(--color-surface-600);
-  border: 1px solid rgba(124, 58, 237, 0.2);
+  background: var(--color-surface-600-val);
+  border: 1px solid color-mix(in srgb, var(--color-brand-primary-val) 20%, transparent);
   border-radius: 0.75rem;
   color: #e2e8f0;
   font-size: 0.9375rem;
@@ -116,11 +162,11 @@ body {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .input-field::placeholder {
-  color: #6b7280;
+  color: #9ca3af;
 }
 .input-field:focus {
-  border-color: #7c3aed;
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+  border-color: var(--color-brand-primary-val);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-primary-val) 15%, transparent);
 }
 
 /* ── Fade-in animation ───────────────────────────────────────────────────── */
@@ -140,8 +186,8 @@ body {
 
 /* ── Pulse glow ──────────────────────────────────────────────────────────── */
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.4); }
-  50%       { box-shadow: 0 0 0 8px rgba(124, 58, 237, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-brand-primary-val) 40%, transparent); }
+  50%       { box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-brand-primary-val) 0%, transparent); }
 }
 .pulse-glow {
   animation: pulseGlow 2s infinite;

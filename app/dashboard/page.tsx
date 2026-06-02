@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { useTheme } from '@/lib/theme-context';
 
 interface Trip {
   _id: string;
@@ -22,6 +23,7 @@ function avatarColour(name: string) {
 
 export default function Dashboard() {
   const { user, isLoading: authLoading, logout, refresh } = useAuth();
+  const { theme, setTheme } = useTheme();
   const router = useRouter();
 
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -191,7 +193,7 @@ export default function Dashboard() {
   if (authLoading || (!user && !authLoading)) {
     return (
       <main className="min-h-dvh flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
       </main>
     );
   }
@@ -199,7 +201,7 @@ export default function Dashboard() {
   return (
     <main
       className="min-h-dvh pb-10"
-      style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(124,58,237,0.12) 0%, transparent 65%)' }}
+      style={{ background: 'radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--color-brand-primary-val) 12%, transparent) 0%, transparent 65%)' }}
     >
       <div className="max-w-md mx-auto px-4 py-6 space-y-5">
 
@@ -209,7 +211,7 @@ export default function Dashboard() {
             {/* Avatar image/button */}
             <button
               onClick={() => setShowProfileModal(true)}
-              className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0 border border-violet-500/30 hover:border-violet-400 transition-colors"
+              className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0 border border-brand-primary/30 hover:border-brand-light transition-colors"
               title="Edit Profile"
             >
               {user?.profilePicture ? (
@@ -217,7 +219,7 @@ export default function Dashboard() {
               ) : (
                 <div
                   className="w-full h-full flex items-center justify-center text-white font-bold text-sm"
-                  style={{ background: 'linear-gradient(135deg, #7c3aed, #db2777)' }}
+                  style={{ background: 'linear-gradient(135deg, var(--color-brand-primary-val), var(--gradient-stop-3))' }}
                 >
                   {user?.name?.[0]?.toUpperCase()}
                 </div>
@@ -227,9 +229,9 @@ export default function Dashboard() {
               <h1 className="text-xl font-extrabold gradient-text leading-tight">SplitDay</h1>
               <p
                 onClick={() => setShowProfileModal(true)}
-                className="text-gray-400 text-xs mt-0.5 hover:text-violet-300 cursor-pointer transition-colors"
+                className="text-gray-400 text-xs mt-0.5 hover:text-brand-light cursor-pointer transition-colors"
               >
-                Hey, <span className="text-violet-300 font-medium">{user?.name}</span> 👋
+                Hey, <span className="text-brand-light font-medium">{user?.name}</span> 👋
               </p>
             </div>
           </div>
@@ -297,8 +299,8 @@ export default function Dashboard() {
                   {participants.map((name) => (
                     <span
                       key={name}
-                      className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm text-violet-300"
-                      style={{ background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)' }}
+                      className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm text-brand-light"
+                      style={{ background: 'color-mix(in srgb, var(--color-brand-primary-val) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--color-brand-primary-val) 30%, transparent)' }}
                     >
                       {name}
                       <button onClick={() => removeParticipant(name)} className="hover:text-rose-400 transition-colors">
@@ -409,7 +411,7 @@ export default function Dashboard() {
 
           {tripsLoading ? (
             <div className="flex justify-center py-8">
-              <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
             </div>
           ) : trips.length === 0 ? (
             <div className="glass-card p-8 text-center">
@@ -441,7 +443,7 @@ export default function Dashboard() {
                     <p className="text-gray-500 text-xs mt-0.5">
                       {trip.participants.length} member{trip.participants.length !== 1 ? 's' : ''}
                       {' · '}
-                      <span className="font-mono text-violet-400">{trip.inviteCode}</span>
+                      <span className="font-mono text-brand-light">{trip.inviteCode}</span>
                     </p>
                     <div className="flex mt-1.5 -space-x-1">
                       {trip.participants.slice(0, 5).map((p) => (
@@ -538,6 +540,30 @@ export default function Dashboard() {
                   onChange={(e) => setProfileName(e.target.value)}
                   placeholder="Your Name"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-gray-400">Theme Preference</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => setTheme('default')}
+                    className={`py-2 rounded-xl text-xs font-semibold border ${theme === 'default' ? 'border-violet-500 bg-violet-500/20 text-white' : 'border-gray-700 bg-transparent text-gray-400 hover:border-gray-500'}`}
+                  >
+                    Default
+                  </button>
+                  <button
+                    onClick={() => setTheme('ocean')}
+                    className={`py-2 rounded-xl text-xs font-semibold border ${theme === 'ocean' ? 'border-sky-500 bg-sky-500/20 text-white' : 'border-gray-700 bg-transparent text-gray-400 hover:border-gray-500'}`}
+                  >
+                    Ocean
+                  </button>
+                  <button
+                    onClick={() => setTheme('forest')}
+                    className={`py-2 rounded-xl text-xs font-semibold border ${theme === 'forest' ? 'border-emerald-500 bg-emerald-500/20 text-white' : 'border-gray-700 bg-transparent text-gray-400 hover:border-gray-500'}`}
+                  >
+                    Forest
+                  </button>
+                </div>
               </div>
 
               {profileError && <p className="text-rose-400 text-xs animate-fade-in-up">⚠ {profileError}</p>}
