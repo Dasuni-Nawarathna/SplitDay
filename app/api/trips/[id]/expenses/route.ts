@@ -74,6 +74,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       splitBetween,
       isUnequal = false,
       customShares,
+      category = 'Other',
     } = body as {
       description?: string;
       amount?: number;
@@ -81,6 +82,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       splitBetween?: string[];
       isUnequal?: boolean;
       customShares?: Record<string, number>;
+      category?: string;
     };
 
     // ── Validate required fields ──────────────────────────────────────────
@@ -153,6 +155,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       splitBetween,
       isUnequal,
       customShares: customShares ?? undefined,
+      category,
       createdAt: new Date(),
     });
 

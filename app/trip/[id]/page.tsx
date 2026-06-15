@@ -79,9 +79,16 @@ function ExpenseCard({
 
       {/* Body */}
       <div className="flex-1 min-w-0">
-        <p className="text-white font-semibold text-sm truncate">{expense.description}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-white font-semibold text-sm truncate">{expense.description}</p>
+          {expense.category && expense.category !== 'Other' && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/10 text-brand-light">
+              {expense.category}
+            </span>
+          )}
+        </div>
         <p className="text-gray-400 text-xs mt-0.5">
-          Paid by <span className="text-violet-300 font-medium">{expense.paidBy}</span>
+          Paid by <span className="text-brand-light font-medium">{expense.paidBy}</span>
           {' · '}
           {expense.isUnequal ? (
             <span className="inline-flex items-center gap-0.5 text-amber-400 font-medium">
