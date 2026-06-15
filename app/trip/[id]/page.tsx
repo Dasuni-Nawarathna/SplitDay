@@ -733,6 +733,28 @@ export default function TripDashboard() {
     }
   };
 
+  const handleExportCSV = () => {
+    if (!data) return;
+    const headers = ['Date', 'Description', 'Category', 'Amount', 'Paid By', 'Split Between'];
+    const rows = data.expenses.map((e) => [
+      new Date(e.createdAt).toLocaleDateString(),
+      `"${e.description.replace(/"/g, '""')}"`, // escape quotes
+      e.category || 'Other',
+      e.amount.toFixed(2),
+      e.paidBy,
+      `"${e.splitBetween.join(', ')}"`,
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${data.trip.name.replace(/\s+/g, '_')}_Expenses.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (isLoading) {
     return (
       <main className="min-h-dvh flex items-center justify-center">
