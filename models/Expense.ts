@@ -8,6 +8,7 @@ export interface IExpense extends Document {
   splitBetween: string[];
   isUnequal: boolean;
   customShares?: Map<string, number>;
+  category?: string;
   createdAt: Date;
 }
 
@@ -50,6 +51,10 @@ const ExpenseSchema = new Schema<IExpense>(
       type: Map,
       of: Number,
       required: false,
+    },
+    category: {
+      type: String,
+      default: 'Other',
     },
     createdAt: {
       type: Date,

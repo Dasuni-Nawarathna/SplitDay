@@ -23,6 +23,7 @@ export interface ExpenseData {
   splitBetween: string[];
   isUnequal: boolean;
   customShares?: Record<string, number>;
+  category?: string;
   createdAt: string;
 }
 
@@ -33,6 +34,7 @@ export interface NewExpensePayload {
   splitBetween: string[];
   isUnequal?: boolean;
   customShares?: Record<string, number>;
+  category?: string;
 }
 
 // ─── Settlements ─────────────────────────────────────────────────────────────
