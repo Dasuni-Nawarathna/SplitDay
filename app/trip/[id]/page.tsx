@@ -133,6 +133,7 @@ type CustomType = 'one-paid' | 'pooled';
 function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseModalProps) {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState('Other');
   const [paidBy, setPaidBy] = useState(participants[0] ?? '');
   const [splitMode, setSplitMode] = useState<SplitMode>('equal');
   const [customType, setCustomType] = useState<CustomType>('one-paid');
@@ -254,7 +255,7 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
         const res = await fetch(`/api/trips/${tripId}/expenses`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ description: description.trim(), amount: amt, paidBy, splitBetween, isUnequal: false }),
+          body: JSON.stringify({ description: description.trim(), amount: amt, paidBy, splitBetween, isUnequal: false, category }),
         });
         const data = await res.json();
         if (!res.ok) { setError(data.error ?? 'Failed to add expense'); setIsLoading(false); return; }
@@ -278,7 +279,7 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             description: description.trim(), amount: amt, paidBy,
-            splitBetween: Object.keys(shares), isUnequal: true, customShares: shares,
+            splitBetween: Object.keys(shares), isUnequal: true, customShares: shares, category
           }),
         });
         const data = await res.json();
@@ -310,6 +311,7 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
                 paidBy: name,
                 splitBetween: [name],
                 isUnequal: false,
+                category
               }),
             })
           )
@@ -378,6 +380,19 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
                    disabled={splitMode === 'amount' && customType === 'pooled'}
                    value={splitMode === 'amount' && customType === 'pooled' ? totalAllocatedAmount.toFixed(2) : amount}
                    onChange={(e) => setAmount(e.target.value)} />
+          </div>
+
+          {/* Category */}
+          <div className="space-y-1">
+            <label className="text-sm text-gray-400">Category</label>
+            <select id="expense-category" className="input-field"
+                    value={category} onChange={(e) => setCategory(e.target.value)}>
+              <option value="Food">Food</option>
+              <option value="Transport">Transport</option>
+              <option value="Accommodation">Accommodation</option>
+              <option value="Activities">Activities</option>
+              <option value="Other">Other</option>
+            </select>
           </div>
 
           {/* Paid By — hidden when everyone chips in their own */}
@@ -758,7 +773,7 @@ export default function TripDashboard() {
               <button
                 id="copy-invite-code-btn"
                 onClick={copyCode}
-                className="text-xs font-mono text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1"
+                className="text-xs font-mono text-brand-light hover:text-brand-primary transition-colors flex items-center gap-1"
               >
                 {trip.inviteCode}
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
@@ -774,7 +789,7 @@ export default function TripDashboard() {
         <div className="grid grid-cols-3 gap-3">
           {[
             { label: 'Total Spent', value: fmt(totalSpent), color: 'text-white' },
-            { label: 'Per Person', value: fmt(perPersonAvg), color: 'text-violet-300' },
+            { label: 'Per Person', value: fmt(perPersonAvg), color: 'text-brand-light' },
             { label: 'Expenses', value: String(expenses.length), color: 'text-amber-400' },
           ].map(({ label, value, color }) => (
             <div key={label} className="glass-card px-3 py-3 text-center">
