@@ -860,9 +860,22 @@ export default function TripDashboard() {
 
         {/* ── Expense Log ────────────────────────────────────────────────── */}
         <div>
-          <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
-            <span className="text-amber-400">🧾</span> Expense Log
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <span className="text-amber-400">🧾</span> Expense Log
+            </h2>
+            {expenses.length > 0 && (
+              <button
+                onClick={handleExportCSV}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-brand-light transition-colors flex items-center gap-1.5"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                  <path fillRule="evenodd" d="M10 3a.75.75 0 0 1 .75.75v6.868l2.22-2.22a.75.75 0 1 1 1.06 1.06l-3.5 3.5a.75.75 0 0 1-1.06 0l-3.5-3.5a.75.75 0 1 1 1.06-1.06l2.22 2.22V3.75A.75.75 0 0 1 10 3ZM5.25 14.5a.75.75 0 0 1 .75-.75h8a.75.75 0 0 1 0 1.5h-8a.75.75 0 0 1-.75-.75Z" clipRule="evenodd" />
+                </svg>
+                Export CSV
+              </button>
+            )}
+          </div>
           {expenses.length === 0 ? (
             <div className="glass-card p-6 text-center">
               <p className="text-gray-500 text-sm">No expenses yet.</p>
