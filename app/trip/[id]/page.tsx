@@ -93,65 +93,108 @@ function ExpenseCard({
   isOwner: boolean;
 }) {
   const [deleting, setDeleting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const colour = avatarColour(expense.paidBy);
 
-  const handleDelete = async () => {
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!confirm(`Delete "${expense.description}"?`)) return;
     setDeleting(true);
     onDelete(expense._id);
   };
 
+  // Determine split breakdown
+  let breakdown: { name: string; amount: number }[] = [];
+  if (expense.isUnequal && expense.customShares) {
+    breakdown = Object.entries(expense.customShares)
+      .map(([name, amount]) => ({ name, amount: Number(amount) }))
+      .filter((share) => share.amount > 0)
+      .sort((a, b) => b.amount - a.amount);
+  } else if (!expense.isUnequal && expense.splitBetween.length > 0) {
+    const amountPerPerson = expense.amount / expense.splitBetween.length;
+    breakdown = expense.splitBetween.map((name) => ({ name, amount: amountPerPerson }));
+  }
+
   return (
-    <div className="flex items-center gap-3 p-4 rounded-xl mb-3 animate-fade-in-up"
-         style={{ background: 'rgba(36,36,64,0.7)', border: '1px solid rgba(255,255,255,0.05)' }}>
-      {/* Avatar */}
-      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-white font-bold text-sm"
-           style={{ background: colour }}>
-        {expense.paidBy[0].toUpperCase()}
-      </div>
-
-      {/* Body */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="text-white font-semibold text-sm truncate">{expense.description}</p>
-          {expense.category && expense.category !== 'Other' && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/10 text-brand-light">
-              {expense.category}
-            </span>
-          )}
+    <div 
+      className="p-4 rounded-xl mb-3 animate-fade-in-up cursor-pointer hover:bg-white/5 transition-colors"
+      style={{ background: 'rgba(36,36,64,0.7)', border: '1px solid rgba(255,255,255,0.05)' }}
+      onClick={() => setExpanded(!expanded)}
+    >
+      <div className="flex items-center gap-3">
+        {/* Avatar */}
+        <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-white font-bold text-sm"
+             style={{ background: colour }}>
+          {expense.paidBy[0].toUpperCase()}
         </div>
-        <p className="text-gray-400 text-xs mt-0.5">
-          Paid by <span className="text-brand-light font-medium">{expense.paidBy}</span>
-          {' · '}
-          {expense.isUnequal ? (
-            <span className="inline-flex items-center gap-0.5 text-amber-400 font-medium">
-              ✏ Custom split
-            </span>
-          ) : (
-            <>split with {expense.splitBetween.length === 1
-              ? expense.splitBetween[0]
-              : `${expense.splitBetween.length} people`}</>
-          )}
-        </p>
+
+        {/* Body */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-white font-semibold text-sm truncate">{expense.description}</p>
+            {expense.category && expense.category !== 'Other' && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/10 text-brand-light">
+                {expense.category}
+              </span>
+            )}
+          </div>
+          <p className="text-gray-400 text-xs mt-0.5">
+            Paid by <span className="text-brand-light font-medium">{expense.paidBy}</span>
+            {' · '}
+            {expense.isUnequal ? (
+              <span className="inline-flex items-center gap-0.5 text-amber-400 font-medium">
+                ✏ Custom split
+              </span>
+            ) : (
+              <>split with {expense.splitBetween.length === 1
+                ? expense.splitBetween[0]
+                : `${expense.splitBetween.length} people`}</>
+            )}
+          </p>
+        </div>
+
+        {/* Amount + delete */}
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          <span className="text-white font-bold">{fmt(expense.amount)}</span>
+          <div className="flex items-center gap-2">
+            {isOwner && (
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                aria-label="Delete expense"
+                id={`delete-expense-${expense._id}`}
+                className="text-gray-600 hover:text-rose-400 transition-colors disabled:opacity-40"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                  <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
+                </svg>
+              </button>
+            )}
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-4 h-4 text-gray-500 transition-transform ${expanded ? 'rotate-180' : ''}`}>
+              <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+            </svg>
+          </div>
+        </div>
       </div>
 
-      {/* Amount + delete */}
-      <div className="flex flex-col items-end gap-1.5 shrink-0">
-        <span className="text-white font-bold">{fmt(expense.amount)}</span>
-        {isOwner && (
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            aria-label="Delete expense"
-            id={`delete-expense-${expense._id}`}
-            className="text-gray-600 hover:text-rose-400 transition-colors disabled:opacity-40"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-              <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
-            </svg>
-          </button>
-        )}
-      </div>
+      {/* Expanded Details */}
+      {expanded && breakdown.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-white/5 animate-fade-in-up">
+          <p className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">Split Details</p>
+          <div className="space-y-1.5">
+            {breakdown.map((share, idx) => (
+              <div key={idx} className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: avatarColour(share.name) }} />
+                  <span className="text-gray-300">{share.name}</span>
+                  {share.name === expense.paidBy && <span className="text-[10px] text-emerald-400 font-medium px-1.5 py-0.5 rounded bg-emerald-500/10">paid</span>}
+                </div>
+                <span className="text-white font-medium">{fmt(share.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
