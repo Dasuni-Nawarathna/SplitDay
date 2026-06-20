@@ -33,19 +33,52 @@ const fmt = (n: number) =>
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function SettlementRow({ from, to, amount }: { from: string; to: string; amount: number }) {
+function SettlementRow({ 
+  from, 
+  to, 
+  amount,
+  onSettleUp,
+  isOwner
+}: { 
+  from: string; 
+  to: string; 
+  amount: number;
+  onSettleUp?: (from: string, to: string, amount: number) => void;
+  isOwner?: boolean;
+}) {
+  const [isSettling, setIsSettling] = useState(false);
+
+  const handleSettle = async () => {
+    if (!onSettleUp) return;
+    if (!confirm(`Mark $${amount.toFixed(2)} as paid from ${from} to ${to}?`)) return;
+    setIsSettling(true);
+    await onSettleUp(from, to, amount);
+    setIsSettling(false);
+  };
+
   return (
     <div className="flex items-center gap-3 py-3 border-b border-white/5 last:border-0 animate-fade-in-up">
-      <span className="font-semibold text-rose-400 text-sm">{from}</span>
+      <span className="font-semibold text-rose-400 text-sm w-16 truncate">{from}</span>
       <div className="flex-1 flex items-center gap-1 text-gray-500">
-        <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, #f43f5e55, #7c3aed55)' }} />
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-violet-400 shrink-0">
+        <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, #f43f5e55, var(--color-brand-primary-val, #7c3aed55))' }} />
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-brand-light shrink-0">
           <path fillRule="evenodd" d="M3 10a.75.75 0 0 1 .75-.75h10.638L10.23 5.29a.75.75 0 1 1 1.04-1.08l5.5 5.25a.75.75 0 0 1 0 1.08l-5.5 5.25a.75.75 0 1 1-1.04-1.08l4.158-3.96H3.75A.75.75 0 0 1 3 10Z" clipRule="evenodd" />
         </svg>
-        <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, #7c3aed55, #10b98155)' }} />
+        <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, var(--color-brand-primary-val, #7c3aed55), #10b98155)' }} />
       </div>
-      <span className="font-semibold text-emerald-400 text-sm">{to}</span>
-      <span className="ml-1 font-bold text-white text-sm">{fmt(amount)}</span>
+      <span className="font-semibold text-emerald-400 text-sm w-16 text-right truncate">{to}</span>
+      <div className="flex flex-col items-end gap-1 shrink-0 w-20">
+        <span className="font-bold text-white text-sm">{fmt(amount)}</span>
+        {isOwner && onSettleUp && (
+          <button 
+            onClick={handleSettle}
+            disabled={isSettling}
+            className="text-[10px] font-medium px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
+          >
+            {isSettling ? '...' : 'Settle'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -755,6 +788,31 @@ export default function TripDashboard() {
     document.body.removeChild(link);
   };
 
+  const handleSettleUp = async (from: string, to: string, amount: number) => {
+    try {
+      const res = await fetch(`/api/trips/${tripId}/expenses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: `Settlement: ${from} paid ${to}`,
+          amount,
+          paidBy: from,
+          splitBetween: [to],
+          isUnequal: false,
+          category: 'Other',
+        }),
+      });
+      if (res.ok) {
+        fetchTrip();
+      } else {
+        alert('Failed to process settlement.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network error while settling up.');
+    }
+  };
+
   if (isLoading) {
     return (
       <main className="min-h-dvh flex items-center justify-center">
@@ -852,7 +910,14 @@ export default function TripDashboard() {
           ) : (
             <div>
               {settlements.map((s, i) => (
-                <SettlementRow key={i} from={s.from} to={s.to} amount={s.amount} />
+                <SettlementRow 
+                  key={i} 
+                  from={s.from} 
+                  to={s.to} 
+                  amount={s.amount} 
+                  onSettleUp={handleSettleUp}
+                  isOwner={isOwner}
+                />
               ))}
             </div>
           )}
