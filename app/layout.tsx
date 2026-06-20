@@ -13,11 +13,11 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: 'SplitDay – Group Expense Tracker',
-  description: 'Track group expenses on trips and outings. No complex setup — just create an account, start an outing, and let SplitDay handle the math.',
-  keywords: ['expense tracker', 'group expenses', 'trip expenses', 'split bills'],
+  description: 'Track group expenses on trips and outings. No complex setup — just create an account, start an outing, and let SplitDay handle the math with 1-click settle up.',
+  keywords: ['expense tracker', 'group expenses', 'trip expenses', 'split bills', 'settle debts'],
   openGraph: {
     title: 'SplitDay – Group Expense Tracker',
-    description: 'Track group expenses and settle debts in seconds.',
+    description: 'Track group expenses and settle debts in seconds with our new 1-click settle up feature.',
     type: 'website',
   },
 };
