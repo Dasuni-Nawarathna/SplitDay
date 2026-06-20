@@ -683,6 +683,11 @@ export default function TripDashboard() {
   const [newComment, setNewComment] = useState('');
   const [postingComment, setPostingComment] = useState(false);
 
+  // Add Member state
+  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [newMemberName, setNewMemberName] = useState('');
+  const [addingMemberError, setAddingMemberError] = useState('');
+
   // Phase 5: Persist session in localStorage
   useEffect(() => {
     if (tripId) localStorage.setItem('splitday_active_trip', tripId);
@@ -725,6 +730,31 @@ export default function TripDashboard() {
     setShowModal(false);
     setIsLoading(true);
     fetchTrip();
+  };
+
+  const handleAddMember = async () => {
+    if (!newMemberName.trim()) {
+      setAddingMemberError('Name is required');
+      return;
+    }
+    setAddingMemberError('');
+    try {
+      const res = await fetch(`/api/trips/${tripId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newParticipant: newMemberName }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setAddingMemberError(json.error || 'Failed to add member');
+      } else {
+        setNewMemberName('');
+        setIsAddingMember(false);
+        fetchTrip();
+      }
+    } catch (err) {
+      setAddingMemberError('Network error');
+    }
   };
 
   const handleDeleteExpense = async (expId: string) => {
@@ -887,15 +917,58 @@ export default function TripDashboard() {
         </div>
 
         {/* ── Participants Row ───────────────────────────────────────────── */}
-        <div className="flex flex-wrap gap-2">
-          {trip.participants.map((name) => (
-            <div key={name}
-                 className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium text-gray-300"
-                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <span className="w-2 h-2 rounded-full inline-block" style={{ background: avatarColour(name) }} />
-              {name}
-            </div>
-          ))}
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
+            {trip.participants.map((name) => (
+              <div key={name}
+                   className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium text-gray-300"
+                   style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <span className="w-2 h-2 rounded-full inline-block" style={{ background: avatarColour(name) }} />
+                {name}
+              </div>
+            ))}
+            
+            {/* Add Member Button / Input */}
+            {isOwner && (
+              <div className="relative flex items-center">
+                {!isAddingMember ? (
+                  <button 
+                    onClick={() => setIsAddingMember(true)}
+                    className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium text-brand-light hover:text-white hover:bg-white/10 transition-colors"
+                    style={{ background: 'rgba(124,58,237,0.1)', border: '1px dashed rgba(124,58,237,0.3)' }}
+                  >
+                    <span>+</span> Add
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1 bg-gray-900/50 rounded-full pr-1 pl-3 py-0.5" style={{ border: '1px solid rgba(124,58,237,0.4)' }}>
+                    <input 
+                      autoFocus
+                      type="text" 
+                      value={newMemberName}
+                      onChange={(e) => setNewMemberName(e.target.value)}
+                      placeholder="Name" 
+                      className="bg-transparent outline-none text-xs text-white w-20 placeholder-gray-500"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddMember();
+                        if (e.key === 'Escape') setIsAddingMember(false);
+                      }}
+                    />
+                    <button onClick={handleAddMember} className="w-5 h-5 rounded-full bg-brand-primary flex items-center justify-center text-white hover:bg-violet-500 transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                        <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                    <button onClick={() => setIsAddingMember(false)} className="w-5 h-5 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                        <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          {addingMemberError && <p className="text-rose-400 text-[10px] pl-1">{addingMemberError}</p>}
         </div>
 
         {/* ── Settlements ────────────────────────────────────────────────── */}

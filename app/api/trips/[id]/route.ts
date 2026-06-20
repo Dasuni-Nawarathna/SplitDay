@@ -74,3 +74,42 @@ export async function GET(_req: NextRequest, { params }: Params) {
     );
   }
 }
+
+// ── PATCH /api/trips/[id] ────────────────────────────────────────────────────
+// Body: { newParticipant: string }
+export async function PATCH(req: NextRequest, { params }: Params) {
+  try {
+    await connectToDatabase();
+    const { id } = await params;
+    
+    const body = await req.json();
+    const { newParticipant } = body as { newParticipant?: string };
+
+    if (!newParticipant || typeof newParticipant !== 'string' || !newParticipant.trim()) {
+      return NextResponse.json({ error: 'Valid participant name is required' }, { status: 400 });
+    }
+
+    const name = newParticipant.trim();
+
+    const trip = await Trip.findById(id);
+    if (!trip) {
+      return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
+    }
+
+    if (trip.participants.includes(name)) {
+      return NextResponse.json({ error: 'Participant already exists' }, { status: 400 });
+    }
+
+    trip.participants.push(name);
+    await trip.save();
+
+    return NextResponse.json({ success: true, participants: trip.participants }, { status: 200 });
+
+  } catch (err: unknown) {
+    console.error('[PATCH /api/trips/[id]]', err);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
