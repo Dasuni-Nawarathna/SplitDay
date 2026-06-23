@@ -29,7 +29,7 @@ function avatarColour(name: string): string {
 
 // ── Format currency ───────────────────────────────────────────────────────────
 const fmt = (n: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
+  new Intl.NumberFormat('en-LK', { style: 'currency', currency: 'LKR' }).format(n);
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -50,7 +50,7 @@ function SettlementRow({
 
   const handleSettle = async () => {
     if (!onSettleUp) return;
-    if (!confirm(`Mark $${amount.toFixed(2)} as paid from ${from} to ${to}?`)) return;
+    if (!confirm(`Mark LKR ${amount.toFixed(2)} as paid from ${from} to ${to}?`)) return;
     setIsSettling(true);
     await onSettleUp(from, to, amount);
     setIsSettling(false);
@@ -349,7 +349,7 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
           if (splitMode === 'custom') {
             setError(`Percentages must total 100% (currently ${totalPct.toFixed(1)}%)`);
           } else {
-            setError(`Allocated amounts ($${totalAllocatedAmount.toFixed(2)}) must equal total amount ($${amt.toFixed(2)})`);
+            setError(`Allocated amounts (LKR ${totalAllocatedAmount.toFixed(2)}) must equal total amount (LKR ${amt.toFixed(2)})`);
           }
           setIsLoading(false); return;
         }
@@ -456,7 +456,7 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
           {/* Amount */}
           <div className="space-y-1">
             <label className="text-sm text-gray-400">
-              {splitMode === 'amount' && customType === 'pooled' ? 'Total Amount ($) — Auto-calculated' : 'Total Amount ($)'}
+              {splitMode === 'amount' && customType === 'pooled' ? 'Total Amount (LKR) — Auto-calculated' : 'Total Amount (LKR)'}
             </label>
             <input id="expense-amount" type="number" className="input-field"
                    placeholder="0.00" min="0.01" step="0.01"
@@ -500,7 +500,7 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
               {[
                 { key: 'equal' as SplitMode, label: '⚖ Equal' },
                 { key: 'custom' as SplitMode, label: '✏ Custom %' },
-                { key: 'amount' as SplitMode, label: '💵 Custom $' },
+                { key: 'amount' as SplitMode, label: '💵 Custom LKR' },
               ].map(({ key, label }) => (
                 <button
                   key={key}
@@ -541,7 +541,7 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
                       </span>
                       <span className="flex-1 min-w-0">
                         <span className={`block truncate ${checked ? 'text-violet-200' : 'text-gray-500'}`}>{p}</span>
-                        {share !== null && <span className="block text-xs text-violet-400">${share.toFixed(2)}</span>}
+                        {share !== null && <span className="block text-xs text-violet-400">LKR {share.toFixed(2)}</span>}
                       </span>
                     </button>
                   );
@@ -556,7 +556,7 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
                 {/* Who-paid sub-toggle */}
                 <div className="grid grid-cols-2 gap-2">
                   {([
-                    { key: 'one-paid' as CustomType, label: '👤 One person paid', hint: splitMode === 'custom' ? 'Others owe their %' : 'Others owe their $' },
+                    { key: 'one-paid' as CustomType, label: '👤 One person paid', hint: splitMode === 'custom' ? 'Others owe their %' : 'Others owe their LKR' },
                     { key: 'pooled'   as CustomType, label: '🤝 Everyone chipped in', hint: 'Each paid their own' },
                   ]).map(({ key, label, hint }) => (
                     <button
@@ -602,10 +602,10 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
                         </span>
                       ) : (
                         <span style={{ color: barColour }} className="font-bold">
-                          ${totalAllocatedAmount.toFixed(2)} / ${amt.toFixed(2)}
+                          LKR {totalAllocatedAmount.toFixed(2)} / LKR {amt.toFixed(2)}
                           {!isBalanced && amtRemaining !== 0 && (
                             <span className="text-gray-500 font-normal ml-1">
-                              ({amtRemaining > 0 ? `+$${amtRemaining.toFixed(2)}` : `-$${Math.abs(amtRemaining).toFixed(2)}`} remaining)
+                              ({amtRemaining > 0 ? `+LKR ${amtRemaining.toFixed(2)}` : `-LKR ${Math.abs(amtRemaining).toFixed(2)}`} remaining)
                             </span>
                           )}
                         </span>
@@ -636,7 +636,7 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
                         <p className="text-white text-sm font-medium truncate">{p}</p>
                         {personAmt > 0 && (
                           <p className="text-xs mt-0.5" style={{ color: customType === 'pooled' ? '#10b981' : '#a78bfa' }}>
-                            {customType === 'pooled' ? '✓ paid' : 'owes'} ${personAmt.toFixed(2)}
+                            {customType === 'pooled' ? '✓ paid' : 'owes'} LKR {personAmt.toFixed(2)}
                           </p>
                         )}
                       </div>
@@ -656,7 +656,7 @@ function AddExpenseModal({ participants, tripId, onClose, onAdded }: AddExpenseM
                           </>
                         ) : (
                           <>
-                            <span className="text-gray-400 text-sm">$</span>
+                            <span className="text-gray-400 text-sm">LKR</span>
                             <input
                               id={`amt-input-${p}`}
                               type="number" min="0" step="0.01"
